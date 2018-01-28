@@ -1,0 +1,26 @@
+---
+title: "Jacks Big Science Projecte"
+author: "Jack Berry (w/ help from Mark)"
+date: "January 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Elevated Plus maze analysis
+This document provides a little bit of analysis on Jack's mouse data.
+
+```{r cars}
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

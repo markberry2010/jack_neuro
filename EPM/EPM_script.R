@@ -85,7 +85,7 @@ plot_correlation_matrix <- function(data, title=""){
           panel.grid.minor = element_blank(),
             panel.background = element_blank(),
           axis.text.x = element_text(angle = 90, hjust = 1)) + 
-  labs(title=title,x="Neuron 1", y="Neuron 1")
+  labs(title=title)
   
 }
 
@@ -165,10 +165,26 @@ get_pcs <- function(wide_data, n_components){
 ###   Cluster Section
 ###
 
-clusters <- wide_data_zeroed[,1:69] %>% t() %>% kmeans( 10)
+# Get clusters into a dataframe 
+clusters <- wide_data_zeroed %>% select(matches("^n\\d")) %>% t() %>% kmeans( 10)
 cluster_ids <- clusters$cluster  %>% data.frame() 
 cluster_ids$neuron_id <- rownames(cluster_ids)
 colnames(cluster_ids) <- c("cluster_id", "neuron_id")
+cluster_ordered_index <- cluster_ids %>% arrange(cluster_id) %>% select(neuron_id)
+
+## Correlations ordered by cluster
+wide_data %>% 
+      select(cluster_ordered_index$neuron_id, timestamp) %>%
+      plot_correlation_matrix()
+
+# Correlations ordered by cluster assuming you have already merged data
+merged %>% 
+  select(cluster_ordered_index$neuron_id, timestamp, open_arms, closed_arms, velocity, X_center, Y_center) %>%
+  plot_correlation_matrix(title="Neural Activation Correlation Matrix\narranged by cluster")
+
+
+
+
 
 long_data_wclusters <- inner_join(long_data, cluster_ids, by ="neuron_id")
 
@@ -205,7 +221,14 @@ beh <- beh %>% select(c("timestamp_int",	"X_center","Y_center","velocity",
 merged <- wide_data_zeroed %>% 
               mutate(timestamp_int = round(timestamp *10))  %>%
               left_join(beh, by="timestamp_int") %>%
-              select(-timestamp_int)
+              select(-timestamp_int) %>%
+              mutate(velocity.smoothed = rollapply(data = velocity, 
+                                   width = 10, 
+                                   FUN = mean, 
+                                   align = "right", 
+                                   fill = NA, 
+                                   na.rm = T))
+
 
 merged_lagged <- wide_data_lagged %>% 
                     mutate(timestamp_int = round(timestamp *10))  %>%
@@ -263,9 +286,9 @@ open_arms.test <- test %>% select(matches("^n\\d|open_arms"))
 
 
 # RandomForest predictions
-rf <- randomForest(factor(maze_location) ~., data=maze_location.train)
-rf_preds <- predict(rf,maze_location.test)
-confusionMatrix(data=rf_preds, maze_location.test$maze_location)
+rf <- randomForest(factor(open_arms) ~., data=open_arms.train)
+rf_preds <- predict(rf,open_arms.test)
+confusionMatrix(data=rf_preds, open_arms.test$open_arms)
 
 # Logisitic Regression predictions
 #
@@ -278,6 +301,17 @@ confusionMatrix(data=glm_preds, open_arms.test$open_arms)
 ############
 pc_confusion <- predictive_model(pca_merged, randomForest, regex="^PC\\d|maze_location")
 
+###########
+
+# Timestamp Regressions 
+# Testing the effect of time interaction terms with open arms 
+
+merged$total_activation <- merged %>% select(matches("^n\\d")) %>%  rowSums()
+open_arms_time_model <- glm(total_activation ~ factor(open_arms) * timestamp + velocity.smoothed  , data = merged)
+summary(open_arms_time_model)
+
+closed_arms_time_model <- glm(total_activation ~ factor(closed_arms) * timestamp + factor(closed_arms) * velocity.smoothed  , data = merged)
+summary(closed_arms_time_model)
 
 
 #####################################################
@@ -319,10 +353,7 @@ rf.importance %>% arrange(desc(MeanDecreaseGini)) %>%
 
 
 #######
-long_data_zeroed %>%
-  inner_join(beh, by="timestamp") %>%
-  filter(neuron_id =='n31') %>%
-  ggplot(aes(timestamp, zscore)) + geom_line() +
+
 
 ##################
 #### Bar Plot 
@@ -342,4 +373,9 @@ long_data_zeroed %>%
         panel.background = element_blank(),
         legend.position="none") 
 
+####################
 
+#### 1) GLM ---- Timestamp velociy and arms Done at line 305
+##   2) Clustered Correlation Matrix Done at line 175
+##   3) Exclude Center from RandomForest. Predict only open arms
+##   
